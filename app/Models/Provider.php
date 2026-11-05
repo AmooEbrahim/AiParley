@@ -50,8 +50,45 @@ class Provider extends Model
     public function isActive(): bool
     {
         return (string) $this->api_key !== ''
-            || $this->agents_count > 0
+            || (int) ($this->agents_count ?? 0) > 0
             || $this->models_cached_at !== null;
+    }
+
+    /**
+     * Rows seeded from PRESETS stay in the table untouched, but they are only
+     * catalog placeholders — not providers the user saved. They must not show
+     * up as configured cards, and their template stays available forever.
+     */
+    public function isPresetPlaceholder(): bool
+    {
+        if ((string) $this->api_key !== '' || $this->models_cached_at !== null) {
+            return false;
+        }
+
+        if ((int) ($this->agents_count ?? $this->agents()->count()) > 0) {
+            return false;
+        }
+
+        return $this->matchingPreset() !== null;
+    }
+
+    /** The catalog entry this row was seeded from, if its name and URL still match. */
+    public function matchingPreset(): ?array
+    {
+        $baseUrl = $this->normalizeUrl((string) $this->base_url);
+
+        foreach (self::PRESETS as $preset) {
+            if ($this->name === $preset['name'] && $baseUrl === $this->normalizeUrl($preset['base_url'])) {
+                return $preset;
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizeUrl(string $url): string
+    {
+        return rtrim(strtolower(trim($url)), '/');
     }
 
     /** @return array<int, array{id: string, name: string, context_length: ?int, price_in_1m: ?float, price_out_1m: ?float}> */

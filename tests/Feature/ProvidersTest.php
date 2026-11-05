@@ -166,12 +166,70 @@ class ProvidersTest extends TestCase
 
         $response->assertOk()
             ->assertSee('Router')
-            ->assertSee('Add custom provider');
+            ->assertSee('Add custom provider')
+            ->assertSee('Provider templates')
+            ->assertSee('data-template="openai"', false);
 
-        // Configured providers render in the active section...
+        // Configured providers render as saved cards...
         $this->assertTrue($configured->fresh()->isActive());
-        // ...untouched presets stay available-to-add and are not "active".
+        $response->assertSee('data-provider-id="'.$configured->id.'"', false);
+
+        // ...untouched catalog rows stay hidden, but their template is offered.
         $this->assertFalse($preset->fresh()->isActive());
+        $response->assertDontSee('data-provider-id="'.$preset->id.'"', false);
+        $response->assertSee('data-template="openai"', false);
+    }
+
+    public function test_provider_template_survives_use_and_deletion(): void
+    {
+        // Using a template reuses its untouched seed row instead of duplicating it.
+        $this->post('/providers', [
+            'name' => 'OpenAI',
+            'base_url' => 'https://api.openai.com/v1',
+            'api_key' => 'sk-live',
+        ])->assertRedirect(route('agents.index'));
+
+        $provider = Provider::where('name', 'OpenAI')->sole();
+        $this->assertSame('sk-live', $provider->api_key);
+
+        $this->get('/agents')
+            ->assertOk()
+            ->assertSee('data-provider-id="'.$provider->id.'"', false)
+            ->assertSee('data-template="openai"', false);
+
+        // Deleting the configured provider must not delete the template.
+        $this->delete("/providers/{$provider->id}")->assertRedirect(route('agents.index'));
+        $this->assertDatabaseMissing('providers', ['id' => $provider->id]);
+
+        $this->get('/agents')
+            ->assertOk()
+            ->assertSee('Provider templates')
+            ->assertSee('data-template="openai"', false);
+    }
+
+    public function test_the_same_template_can_be_added_more_than_once(): void
+    {
+        $this->post('/providers', [
+            'name' => 'OpenAI',
+            'base_url' => 'https://api.openai.com/v1',
+            'api_key' => 'sk-first',
+        ])->assertRedirect(route('agents.index'));
+
+        $this->post('/providers', [
+            'name' => 'OpenAI',
+            'base_url' => 'https://api.openai.com/v1',
+            'api_key' => 'sk-second',
+        ])->assertRedirect(route('agents.index'));
+
+        $names = Provider::query()->where('name', 'like', 'OpenAI%')->pluck('name')->all();
+
+        $this->assertContains('OpenAI', $names);
+        $this->assertContains('OpenAI 2', $names);
+
+        $this->get('/agents')
+            ->assertOk()
+            ->assertSee('data-template="openai"', false)
+            ->assertSee('OpenAI 2');
     }
 
     public function test_agent_edit_pages_are_gone_but_updates_work(): void

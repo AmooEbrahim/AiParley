@@ -3,8 +3,6 @@
 @section('title', 'Agents · AiParley')
 
 @section('content')
-    @php($activeProviders = array_values(array_filter($providers, fn ($p) => $p['is_active'])))
-    @php($availableProviders = array_values(array_filter($providers, fn ($p) => ! $p['is_active'])))
     @php($formOpen = $agents->isEmpty() || request()->old() !== [])
 
     <div x-data="{ newOpen: @js($formOpen) }">
@@ -35,20 +33,21 @@
                 <h2 class="text-sm font-semibold uppercase tracking-wider text-zinc-400">
                     Providers
                     <span class="ml-1 normal-case tracking-normal text-zinc-600">
-                        {{ count($activeProviders) }} active · {{ count($availableProviders) }} available to add
+                        {{ count($providers) }} saved · {{ count($presets) }} templates
                     </span>
                 </h2>
                 <button type="button" class="btn-primary !px-3 !py-1.5 text-xs"
-                        x-on:click="keyVisible = false; modal = { id: null, name: '', base_url: '', has_key: false }">
+                        x-on:click="keyVisible = false; modal = { id: null, name: '', base_url: '', has_key: false, from_template: false }">
                     + Add custom provider
                 </button>
             </div>
 
-            {{-- Active providers --}}
+            {{-- Saved providers --}}
             <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                @forelse ($activeProviders as $p)
+                @forelse ($providers as $p)
                     @php($host = parse_url($p['base_url'], PHP_URL_HOST) ?: $p['base_url'])
                     <div class="flex min-w-0 items-center gap-2.5 rounded-xl border border-zinc-700/70 bg-zinc-800/40 px-3 py-2 transition hover:border-zinc-600 hover:bg-zinc-800/70"
+                         data-provider-id="{{ $p['id'] }}"
                          x-data="{ refreshing: false, count: {{ (int) $p['models_count'] }}, error: null }">
                         <span class="h-2 w-2 shrink-0 rounded-full {{ $p['has_key'] ? 'bg-emerald-400' : 'bg-amber-400' }}"
                               title="{{ $p['has_key'] ? 'API key saved' : 'No API key' }}"></span>
@@ -103,35 +102,42 @@
                         <div x-show="error" x-cloak class="sr-only" x-text="error"></div>
                     </div>
                 @empty
-                    <p class="col-span-full text-sm text-zinc-500">Nothing configured yet — pick one of the known providers below.</p>
+                    <p class="col-span-full text-sm text-zinc-500">No saved providers yet — start from a template below.</p>
                 @endforelse
             </div>
 
-            {{-- Available presets --}}
-            @if (count($availableProviders) > 0)
-                <div class="mt-3 border-t border-zinc-800/70 pt-3">
-                    <p class="mb-2 text-[11px] uppercase tracking-wider text-zinc-600">Available to add</p>
-                    <div class="flex flex-wrap gap-2">
-                        @foreach ($availableProviders as $p)
-                            <button type="button"
-                                    class="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-zinc-700/80 px-2.5 py-1.5 text-xs text-zinc-500 transition hover:border-violet-500/50 hover:text-zinc-200"
-                                    title="Add {{ $p['base_url'] }}"
-                                    x-on:click="keyVisible = false; modal = @js(['id' => $p['id'], 'name' => $p['name'], 'base_url' => $p['base_url'], 'has_key' => $p['has_key']])">
-                                <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                                {{ $p['name'] }}
-                            </button>
-                        @endforeach
-                    </div>
+            {{-- Templates: a static catalog, never consumed by use or deletion --}}
+            <div class="mt-3 border-t border-zinc-800/70 pt-3">
+                <p class="mb-2 text-[11px] uppercase tracking-wider text-zinc-600">
+                    Provider templates
+                    <span class="normal-case tracking-normal text-zinc-600/80">— always available; add as many instances as you need</span>
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    @foreach ($presets as $template)
+                        <button type="button"
+                                data-template="{{ \Illuminate\Support\Str::slug($template['name']) }}"
+                                class="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-zinc-700/80 px-2.5 py-1.5 text-xs text-zinc-500 transition hover:border-violet-500/50 hover:text-zinc-200"
+                                title="Add a {{ $template['name'] }} provider ({{ $template['base_url'] }})"
+                                x-on:click="keyVisible = false; modal = @js(['id' => null, 'name' => $template['name'], 'base_url' => $template['base_url'], 'has_key' => false, 'from_template' => true])">
+                            <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                            {{ $template['name'] }}
+                        </button>
+                    @endforeach
                 </div>
-            @endif
+            </div>
 
             {{-- Add / configure provider modal --}}
             <div x-show="modal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4">
                 <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" x-on:click="modal = null" aria-hidden="true"></div>
                 <div class="relative w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-2xl" role="dialog" aria-modal="true">
                     <h3 class="font-semibold text-white"
-                        x-text="modal?.id ? ('Configure “' + (modal?.name ?? '') + '”') : 'Add custom provider'"></h3>
+                        x-text="modal?.id
+                            ? ('Configure “' + (modal?.name ?? '') + '”')
+                            : (modal?.from_template ? ('Add “' + (modal?.name ?? '') + '” provider') : 'Add custom provider')"></h3>
                     <p class="mt-1 text-xs text-zinc-500">Any OpenAI-compatible endpoint — we append /chat/completions and /models.</p>
+                    <p x-show="modal?.from_template" x-cloak class="mt-1 text-xs text-violet-300/80">
+                        This template stays available — add another instance any time. A number is appended if the name is taken.
+                    </p>
 
                     <form method="POST" class="mt-4 space-y-4"
                           x-bind:action="modal?.id ? providersUrl + '/' + modal.id : storeUrl">

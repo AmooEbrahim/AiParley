@@ -14,7 +14,18 @@ class ProviderController extends Controller
 {
     public function store(Request $request): RedirectResponse
     {
-        $provider = Provider::create($this->validated($request));
+        // Preset rows are catalog placeholders, not user data: reuse the empty
+        // one instead of creating a twin. Configured names get a suffix so a
+        // template can be instantiated as many times as the user likes.
+        $placeholder = $this->placeholderNamed((string) $request->input('name'));
+
+        if ($placeholder !== null) {
+            $placeholder->update($this->validated($request, $placeholder));
+            $provider = $placeholder;
+        } else {
+            $request->merge(['name' => $this->uniqueName((string) $request->input('name'))]);
+            $provider = Provider::create($this->validated($request));
+        }
 
         return redirect()
             ->route('agents.index')
@@ -120,6 +131,37 @@ class ProviderController extends Controller
         ])->save();
 
         return $models;
+    }
+
+    /** An untouched catalog row with this exact name, if one exists. */
+    private function placeholderNamed(string $name): ?Provider
+    {
+        if (trim($name) === '') {
+            return null;
+        }
+
+        $provider = Provider::query()->where('name', $name)->first();
+
+        return $provider?->isPresetPlaceholder() ? $provider : null;
+    }
+
+    /** Keep names unique when the same template is added more than once. */
+    private function uniqueName(string $name): string
+    {
+        $name = trim($name);
+
+        if ($name === '' || ! Provider::query()->where('name', $name)->exists()) {
+            return $name;
+        }
+
+        $base = $name;
+        $i = 2;
+
+        while (Provider::query()->where('name', $name)->exists()) {
+            $name = $base.' '.$i++;
+        }
+
+        return $name;
     }
 
     private function validated(Request $request, ?Provider $provider = null): array

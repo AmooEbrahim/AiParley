@@ -16,7 +16,8 @@ class AgentController extends Controller
     {
         return view('agents.index', [
             'agents' => Agent::query()->with('provider')->orderBy('name')->get(),
-            'providers' => $this->providersForPage(),
+            'providers' => $this->savedProviders(),
+            'presets' => Provider::PRESETS,
             'editId' => (int) $request->query('edit'),
         ]);
     }
@@ -97,13 +98,14 @@ class AgentController extends Controller
         }
     }
 
-    private function providersForPage(): array
+    private function savedProviders(): array
     {
         return Provider::query()
             ->withCount('agents')
-            ->orderByRaw('CASE WHEN api_key IS NOT NULL OR agents_count > 0 OR models_cached_at IS NOT NULL THEN 0 ELSE 1 END')
             ->orderBy('name')
             ->get()
+            ->reject(fn (Provider $p) => $p->isPresetPlaceholder())
+            ->values()
             ->map(fn (Provider $p) => [
                 'id' => (string) $p->id,
                 'name' => $p->name,
