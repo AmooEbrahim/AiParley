@@ -81,7 +81,7 @@ class ProcessTurnJob implements ShouldQueue
         $messages = $contextBuilder->build($speaker);
 
         $start = microtime(true);
-        $result = $client->complete($agent, $messages);
+        $result = $client->complete($agent, $messages, "parley-chat-{$chat->id}");
         $latencyMs = (int) round((microtime(true) - $start) * 1000);
 
         $chat->messages()->create([

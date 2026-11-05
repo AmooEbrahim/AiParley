@@ -6,6 +6,7 @@ use App\Models\Agent;
 use App\Models\Provider;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class AiClient
 {
@@ -16,7 +17,7 @@ class AiClient
      *
      * @throws \RuntimeException on transport errors, HTTP >= 400, or malformed responses.
      */
-    public function complete(Agent $agent, array $messages): array
+    public function complete(Agent $agent, array $messages, ?string $sessionId = null): array
     {
         $payload = [
             'model' => $agent->model,
@@ -31,11 +32,14 @@ class AiClient
             $payload['max_tokens'] = $agent->max_tokens;
         }
 
+        $url = rtrim($this->baseUrlFor($agent), '/').'/chat/completions';
+
         $response = $this->post(
-            rtrim($this->baseUrlFor($agent), '/').'/chat/completions',
+            $url,
             $this->apiKeyFor($agent),
             max(5, (int) $agent->timeout_seconds),
             $payload,
+            $this->sessionHeaders($url, $sessionId),
         );
 
         if ($response->status() >= 400) {
@@ -64,13 +68,13 @@ class AiClient
     }
 
     /** Small ping used by the "test connection" button (1 token). */
-    public function ping(Agent $agent): array
+    public function ping(Agent $agent, ?string $sessionId = null): array
     {
         $start = microtime(true);
 
         $result = $this->complete($agent, [
             ['role' => 'user', 'content' => 'ping'],
-        ]);
+        ], $sessionId);
 
         return $result + ['latency_ms' => (int) round((microtime(true) - $start) * 1000)];
     }
@@ -88,10 +92,13 @@ class AiClient
             throw new \RuntimeException("Provider \"{$provider->name}\" has no valid base URL.");
         }
 
+        $url = rtrim($provider->base_url, '/').'/models';
+
         $response = Http::acceptJson()
             ->when((string) $provider->api_key !== '', fn ($req) => $req->withToken((string) $provider->api_key))
+            ->withHeaders($this->sessionHeaders($url, "parley-provider-{$provider->id}-models"))
             ->timeout(30)
-            ->get(rtrim($provider->base_url, '/').'/models');
+            ->get($url);
 
         if ($response->status() >= 400) {
             throw new \RuntimeException($this->errorMessage($response));
@@ -161,12 +168,30 @@ class AiClient
         return (string) $agent->resolveApiKey();
     }
 
-    private function post(string $url, string $apiKey, int $timeoutSeconds, array $payload): Response
+    private function post(string $url, string $apiKey, int $timeoutSeconds, array $payload, array $headers = []): Response
     {
         return Http::acceptJson()
             ->when($apiKey !== '', fn ($req) => $req->withToken($apiKey))
+            ->withHeaders($headers)
             ->timeout($timeoutSeconds)
             ->post($url, $payload);
+    }
+
+    /**
+     * OpenCode asks clients to identify a conversation with x-opencode-session
+     * so it can optimize routing/caching. Only send it to OpenCode hosts.
+     */
+    private function sessionHeaders(string $url, ?string $sessionId): array
+    {
+        $host = parse_url($url, PHP_URL_HOST) ?: '';
+
+        if ($host !== 'opencode.ai' && ! str_ends_with($host, '.opencode.ai')) {
+            return [];
+        }
+
+        return [
+            'x-opencode-session' => $sessionId ?: 'parley-'.Str::uuid()->toString(),
+        ];
     }
 
     private function errorMessage(Response $response): string

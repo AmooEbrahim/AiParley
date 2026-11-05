@@ -86,7 +86,7 @@ class AgentController extends Controller
         }
 
         try {
-            $result = $client->ping($probe);
+            $result = $client->ping($probe, "parley-agent-{$agent->id}-test");
 
             return response()->json([
                 'ok' => true,
