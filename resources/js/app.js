@@ -2,6 +2,193 @@ import Alpine from 'alpinejs';
 
 window.Alpine = Alpine;
 
+Alpine.data('agentForm', (config) => ({
+    providerId: config.providerId ?? '',
+    customBaseUrl: config.customBaseUrl,
+    customApiKey: config.customApiKey,
+    model: config.model ?? '',
+    advancedOpen: !!config.advancedOpen,
+
+    open: false,
+    highlighted: -1,
+    groups: [],
+
+    init() {
+        this.groups = config.providers.map((p) => ({
+            id: String(p.id),
+            name: p.name,
+            baseUrl: p.base_url,
+            count: p.models_count ?? 0,
+            isActive: !!p.is_active,
+            expanded: false,
+            loading: false,
+            error: null,
+            loaded: false,
+            models: [],
+        }));
+
+        // Eagerly load + expand the initially selected provider's group.
+        const selected = this.selectedGroup;
+        if (selected) {
+            selected.expanded = true;
+            this.loadGroup(selected);
+        }
+    },
+
+    get isCustom() {
+        return this.providerId === '';
+    },
+
+    get selectedGroup() {
+        return this.groups.find((g) => g.id === String(this.providerId)) ?? null;
+    },
+
+    get searching() {
+        return (this.model ?? '').trim() !== '';
+    },
+
+    async loadGroup(g, force = false) {
+        if (g.loading || (g.loaded && !force)) return;
+        g.loading = true;
+        g.error = null;
+        try {
+            const res = await fetch(`/api/providers/${g.id}/models${force ? '?refresh=1' : ''}`, {
+                headers: { Accept: 'application/json' },
+            });
+            const data = await res.json().catch(() => ({ ok: false }));
+            if (data.ok) {
+                g.models = data.models ?? [];
+                g.count = g.models.length;
+                g.loaded = true;
+            } else {
+                g.error = data.error || 'request failed.';
+            }
+        } catch (e) {
+            g.error = 'request failed.';
+        } finally {
+            g.loading = false;
+        }
+    },
+
+    toggleGroup(g) {
+        if (this.searching) return; // while searching every group stays auto-expanded
+        g.expanded = !g.expanded;
+        if (g.expanded) this.loadGroup(g);
+    },
+
+    /**
+     * Groups prepared for rendering. While typing, filter across ALL groups and
+     * auto-expand the ones with matches; otherwise respect collapse state.
+     * Empty groups stay visible as headers so any provider can be picked.
+     */
+    get viewGroups() {
+        const q = (this.model ?? '').trim().toLowerCase();
+        const out = [];
+        for (const g of this.groups) {
+            let models = g.models;
+            let nameHit = false;
+            if (q !== '') {
+                models = g.models.filter((m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q));
+                nameHit = g.name.toLowerCase().includes(q);
+                if (models.length === 0 && !nameHit && !g.error) continue;
+            }
+            out.push({
+                g,
+                models,
+                showModels: q !== '' ? models.length > 0 : g.expanded,
+                nameHit,
+            });
+        }
+        return out;
+    },
+
+    /** Flattened dropdown rows for keyboard navigation. */
+    flatItems() {
+        const items = [];
+        for (const v of this.viewGroups) {
+            if (v.showModels) {
+                for (const m of v.models) items.push({ type: 'model', g: v.g, m });
+            }
+        }
+        items.push({ type: 'custom' });
+        return items;
+    },
+
+    onPickerKeydown(e) {
+        const items = this.flatItems();
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!this.open) {
+                this.open = true;
+                return;
+            }
+            if (items.length) this.highlighted = Math.min(this.highlighted + 1, items.length - 1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            this.highlighted = Math.max(this.highlighted - 1, 0);
+        } else if (e.key === 'Enter') {
+            if (this.open) {
+                e.preventDefault();
+                const item = items[Math.max(0, this.highlighted)];
+                if (item) this.choose(item);
+            }
+        } else if (e.key === 'Tab') {
+            this.open = false;
+        }
+
+        if (this.open) {
+            this.$nextTick(() => {
+                const el = document.querySelector('[data-picker-active="true"]');
+                el?.scrollIntoView({ block: 'nearest' });
+            });
+        }
+    },
+
+    choose(item) {
+        if (item.type === 'custom') {
+            this.switchToCustom();
+            return;
+        }
+        this.providerId = item.g.id;
+        this.model = item.m.id;
+        this.setPrice('price_per_1m_input', item.m.price_in_1m);
+        this.setPrice('price_per_1m_output', item.m.price_out_1m);
+        this.open = false;
+        this.highlighted = -1;
+    },
+
+    switchToCustom() {
+        this.providerId = '';
+        this.open = false;
+        this.highlighted = -1;
+    },
+
+    setPrice(name, v) {
+        const el = this.$root.querySelector(`input[name="${name}"]`);
+        if (el && !el.disabled && v !== null && v !== undefined) el.value = v;
+    },
+
+    isHighlighted(g, m) {
+        const it = this.flatItems()[this.highlighted];
+        return !!it && it.type === 'model' && it.g === g && it.m === m;
+    },
+
+    isCustomHighlighted() {
+        const it = this.flatItems()[this.highlighted];
+        return !!it && it.type === 'custom';
+    },
+
+    metaLine(m) {
+        const parts = [];
+        if (m.context_length) parts.push(Math.round(m.context_length / 1000).toLocaleString() + 'k ctx');
+        const fmt = (p) => (p === null ? '?' : p === 0 ? 'free' : '$' + p);
+        if (m.price_in_1m !== null || m.price_out_1m !== null) {
+            parts.push(`${fmt(m.price_in_1m)} / ${fmt(m.price_out_1m)} per 1M`);
+        }
+        return parts.join(' · ');
+    },
+}));
+
 Alpine.data('chatRoom', (config) => ({
     ...config,
     budget: config.auto_budget,
@@ -33,7 +220,7 @@ Alpine.data('chatRoom', (config) => ({
     },
 
     schedulePoll() {
-        const delay = this.fastPolls > 0 ? 2000 : 10000;
+        const delay = this.fastPolls > 0 ? 1000 : 2000;
         if (this.fastPolls > 0) this.fastPolls--;
         this.pollTimer = setTimeout(() => this.tick(), delay);
     },

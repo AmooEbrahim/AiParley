@@ -9,19 +9,19 @@
 </head>
 <body class="min-h-screen bg-zinc-950 text-zinc-100 antialiased selection:bg-violet-500/30">
     <nav class="border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur sticky top-0 z-40">
-        <div class="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3.5">
-            <a href="{{ route('chats.index') }}" class="flex items-center gap-2 text-lg font-semibold tracking-tight">
-                <span aria-hidden="true">&#128419;</span> AiParley
+        <div class="mx-auto flex max-w-6xl items-center gap-2 sm:gap-6 px-3 sm:px-4 py-3.5">
+            <a href="{{ route('chats.index') }}" class="flex shrink-0 items-center gap-2 text-lg font-semibold tracking-tight">
+                <span aria-hidden="true">&#128419;</span><span class="hidden sm:inline">AiParley</span>
             </a>
-            <div class="flex items-center gap-1 text-sm font-medium">
+            <div class="flex min-w-0 items-center overflow-x-auto text-sm font-medium [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <a href="{{ route('chats.index') }}"
-                   class="rounded-md px-3 py-1.5 {{ request()->routeIs('chats.*') && ! request()->routeIs('chats.create') ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60' }} transition">Chats</a>
+                   class="whitespace-nowrap rounded-md px-2 py-1.5 sm:px-2.5 {{ request()->routeIs('chats.*') && ! request()->routeIs('chats.create') ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60' }} transition">Chats</a>
                 <a href="{{ route('agents.index') }}"
-                   class="rounded-md px-3 py-1.5 {{ request()->routeIs('agents.*') ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60' }} transition">Agents</a>
+                   class="whitespace-nowrap rounded-md px-2 py-1.5 sm:px-2.5 {{ request()->routeIs('agents.*') || request()->routeIs('providers.*') ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60' }} transition">Agents</a>
                 <a href="{{ route('settings.edit') }}"
-                   class="rounded-md px-3 py-1.5 {{ request()->routeIs('settings.*') ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60' }} transition">Global Prompt</a>
+                   class="whitespace-nowrap rounded-md px-2 py-1.5 sm:px-2.5 {{ request()->routeIs('settings.*') ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60' }} transition">Global Prompt</a>
             </div>
-            <span class="ml-auto hidden text-xs text-zinc-600 sm:block">local multi-agent group chat</span>
+            <span class="ml-auto hidden shrink-0 text-xs text-zinc-600 lg:block">local multi-agent group chat</span>
         </div>
     </nav>
 
@@ -31,6 +31,14 @@
                  class="mb-6 flex items-center justify-between gap-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm text-emerald-300">
                 <span>{{ session('success') }}</span>
                 <button x-on:click="show = false" class="text-emerald-400/70 hover:text-emerald-200">&times;</button>
+            </div>
+        @endif
+
+        @if (session('error'))
+            <div x-data="{ show: true }" x-show="show" x-transition.opacity x-init="setTimeout(() => show = false, 6000)"
+                 class="mb-6 flex items-center justify-between gap-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">
+                <span class="min-w-0 break-words">{{ session('error') }}</span>
+                <button x-on:click="show = false" class="shrink-0 text-red-400/70 hover:text-red-200">&times;</button>
             </div>
         @endif
 

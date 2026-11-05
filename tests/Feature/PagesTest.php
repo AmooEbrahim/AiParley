@@ -32,7 +32,6 @@ class PagesTest extends TestCase
 
         $this->get('/')->assertOk();
         $this->get('/agents')->assertOk();
-        $this->get("/agents/{$agent->id}/edit")->assertOk();
         $this->get('/chats/create')->assertOk();
         $this->get("/chats/{$chat->id}")->assertOk();
         $this->get('/settings')->assertOk();

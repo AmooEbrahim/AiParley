@@ -4,16 +4,22 @@ use App\Http\Controllers\AgentController;
 use App\Http\Controllers\ChatAgentController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ChatMessageController;
+use App\Http\Controllers\ProviderController;
 use App\Http\Controllers\SettingController;
 use Illuminate\Support\Facades\Route;
 
 // Dashboard
 Route::get('/', [ChatController::class, 'index'])->name('chats.index');
 
+// Providers (managed inline on the Agents page)
+Route::post('/providers', [ProviderController::class, 'store'])->name('providers.store');
+Route::put('/providers/{provider}', [ProviderController::class, 'update'])->name('providers.update');
+Route::delete('/providers/{provider}', [ProviderController::class, 'destroy'])->name('providers.destroy');
+Route::post('/providers/{provider}/models/refresh', [ProviderController::class, 'refreshModels'])->name('providers.models.refresh');
+
 // Agents
 Route::get('/agents', [AgentController::class, 'index'])->name('agents.index');
 Route::post('/agents', [AgentController::class, 'store'])->name('agents.store');
-Route::get('/agents/{agent}/edit', [AgentController::class, 'edit'])->name('agents.edit');
 Route::put('/agents/{agent}', [AgentController::class, 'update'])->name('agents.update');
 Route::delete('/agents/{agent}', [AgentController::class, 'destroy'])->name('agents.destroy');
 Route::post('/agents/{agent}/test', [AgentController::class, 'test'])->name('agents.test');
@@ -45,3 +51,4 @@ Route::delete('/messages/{message}', [ChatMessageController::class, 'destroy'])-
 
 // JSON polling
 Route::get('/api/chats/{chat}/messages', [ChatMessageController::class, 'index'])->name('api.chats.messages');
+Route::get('/api/providers/{provider}/models', [ProviderController::class, 'models'])->name('api.providers.models');

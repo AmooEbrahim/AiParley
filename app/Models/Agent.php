@@ -12,6 +12,7 @@ class Agent extends Model
     protected $fillable = [
         'name',
         'color',
+        'provider_id',
         'base_url',
         'api_key',
         'model',
@@ -37,6 +38,23 @@ class Agent extends Model
     public function chatAgents()
     {
         return $this->hasMany(ChatAgent::class);
+    }
+
+    public function provider()
+    {
+        return $this->belongsTo(Provider::class);
+    }
+
+    /** Endpoint URL, preferring the agent's own override over its provider. */
+    public function resolveBaseUrl(): ?string
+    {
+        return $this->base_url ?? $this->provider?->base_url;
+    }
+
+    /** API key, preferring the agent's own override over its provider. */
+    public function resolveApiKey(): ?string
+    {
+        return $this->api_key ?? $this->provider?->api_key;
     }
 
     public function priceFor(int $promptTokens, int $completionTokens): ?float

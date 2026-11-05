@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agent;
+use App\Models\Provider;
 use App\Services\AiClient;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -11,10 +12,12 @@ use Illuminate\Validation\Rule;
 
 class AgentController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
         return view('agents.index', [
-            'agents' => Agent::query()->orderBy('name')->get(),
+            'agents' => Agent::query()->with('provider')->orderBy('name')->get(),
+            'providers' => $this->providersForPage(),
+            'editId' => (int) $request->query('edit'),
         ]);
     }
 
@@ -25,11 +28,6 @@ class AgentController extends Controller
         return redirect()
             ->route('agents.index')
             ->with('success', "Agent \"{$agent->name}\" created.");
-    }
-
-    public function edit(Agent $agent): View
-    {
-        return view('agents.edit', ['agent' => $agent]);
     }
 
     public function update(Request $request, Agent $agent): RedirectResponse
@@ -52,17 +50,39 @@ class AgentController extends Controller
 
     public function test(Request $request, Agent $agent, AiClient $client)
     {
-        $request->validate([
+        $data = $request->validate([
             'base_url' => ['nullable', 'url'],
             'api_key' => ['nullable', 'string'],
             'model' => ['nullable', 'string'],
+            'provider_id' => ['nullable', Rule::exists('providers', 'id')],
         ]);
 
-        $probe = $agent->replicate()->fill(array_filter([
-            'base_url' => $request->input('base_url'),
-            'api_key' => $request->input('api_key'),
-            'model' => $request->input('model'),
-        ]));
+        // Probe with exactly what the form shows: an explicit provider, or
+        // explicit overrides over the agent's current resolved config.
+        $probe = new Agent;
+        $probe->forceFill([
+            'name' => $agent->name,
+            'model' => $data['model'] ?? $agent->model,
+            'timeout_seconds' => $agent->timeout_seconds,
+        ]);
+
+        if (! empty($data['provider_id'])) {
+            /** @var Provider $provider */
+            $provider = Provider::query()->findOrFail($data['provider_id']);
+            $probe->forceFill([
+                'base_url' => $data['base_url'] ?? $provider->base_url,
+                'api_key' => array_key_exists('api_key', $data) && $data['api_key'] !== null
+                    ? $data['api_key']
+                    : $provider->api_key,
+            ]);
+        } else {
+            $probe->forceFill([
+                'base_url' => $data['base_url'] ?? $agent->resolveBaseUrl(),
+                'api_key' => array_key_exists('api_key', $data) && $data['api_key'] !== null
+                    ? $data['api_key']
+                    : $agent->resolveApiKey(),
+            ]);
+        }
 
         try {
             $result = $client->ping($probe);
@@ -77,9 +97,29 @@ class AgentController extends Controller
         }
     }
 
+    private function providersForPage(): array
+    {
+        return Provider::query()
+            ->withCount('agents')
+            ->orderByRaw('CASE WHEN api_key IS NOT NULL OR agents_count > 0 OR models_cached_at IS NOT NULL THEN 0 ELSE 1 END')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Provider $p) => [
+                'id' => (string) $p->id,
+                'name' => $p->name,
+                'base_url' => $p->base_url,
+                'has_key' => (string) $p->api_key !== '',
+                'agents_count' => $p->agents_count,
+                'models_count' => count($p->cachedModels()),
+                'is_active' => $p->isActive(),
+                'models_cached_at' => $p->models_cached_at?->toIso8601String(),
+            ])
+            ->all();
+    }
+
     private function validated(Request $request, ?Agent $agent = null): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'name' => [
                 'required', 'string', 'max:120',
                 Rule::unique('agents', 'name')
@@ -87,8 +127,9 @@ class AgentController extends Controller
                     ->whereNull('deleted_at'),
             ],
             'color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
-            'base_url' => ['required', 'url', 'max:255'],
-            'api_key' => ['required', 'string', 'max:255'],
+            'provider_id' => ['nullable', Rule::exists('providers', 'id')],
+            'base_url' => ['nullable', 'url', 'max:255', 'required_without:provider_id'],
+            'api_key' => ['nullable', 'string', 'max:255', 'required_without:provider_id'],
             'model' => ['required', 'string', 'max:120'],
             'temperature' => ['nullable', 'numeric', 'between:0,2'],
             'max_tokens' => ['nullable', 'integer', 'min:1', 'max:100000'],
@@ -97,5 +138,15 @@ class AgentController extends Controller
             'price_per_1m_output' => ['nullable', 'numeric', 'min:0'],
             'timeout_seconds' => ['required', 'integer', 'min:5', 'max:300'],
         ]);
+
+        if (array_key_exists('provider_id', $data) && $data['provider_id'] !== null) {
+            // Endpoint + credentials come from the provider.
+            $data['base_url'] = null;
+            $data['api_key'] = null;
+        } else {
+            unset($data['provider_id']);
+        }
+
+        return $data;
     }
 }
