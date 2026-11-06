@@ -199,6 +199,15 @@ Alpine.data('chatRoom', (config) => ({
     unread: 0,
     list: null,
 
+    get budgetDirty() {
+        return Number(this.budget) !== Number(this.auto_budget);
+    },
+
+    get budgetValid() {
+        const value = Number(this.budget);
+        return Number.isInteger(value) && value >= 1 && value <= 500;
+    },
+
     // Composer (user-composed messages)
     composerOpen: false,
     composerKind: '',
@@ -253,7 +262,11 @@ Alpine.data('chatRoom', (config) => ({
             if (!known.has(m.id)) this.messages.push(m);
         }
 
+        const budgetWasDirty = this.budgetDirty;
+
         this.status = data.status;
+        this.auto_budget = data.auto_budget;
+        if (!budgetWasDirty) this.budget = data.auto_budget;
         this.message_limit = data.message_limit;
         this.message_count = data.message_count;
         this.last_error = data.last_error;
@@ -269,21 +282,25 @@ Alpine.data('chatRoom', (config) => ({
         }
     },
 
-    async action(path) {
+    async action(path, body = null) {
         if (this.busy) return;
         this.busy = true;
         this.actionError = null;
         try {
+            const headers = {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
+            };
+            if (body !== null) headers['Content-Type'] = 'application/json';
+
             const res = await fetch(path, {
                 method: 'POST',
-                headers: {
-                    Accept: 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
-                },
+                headers,
+                body: body === null ? undefined : JSON.stringify(body),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok || data.ok === false) {
-                this.actionError = data.error || 'Request failed.';
+                this.actionError = data.error || data.message || 'Request failed.';
             } else {
                 this.fastPolls = 8; // poll briskly for ~16s after a user action
                 await this.poll();
@@ -295,7 +312,14 @@ Alpine.data('chatRoom', (config) => ({
         }
     },
 
-    start() { return this.action(`/chats/${this.id}/start`); },
+    start() {
+        if (!this.budgetValid) {
+            this.actionError = 'Budget must be a whole number between 1 and 500.';
+            return;
+        }
+
+        return this.action(`/chats/${this.id}/start`, { auto_budget: Number(this.budget) });
+    },
     stop() { return this.action(`/chats/${this.id}/stop`); },
     next() { return this.action(`/chats/${this.id}/next`); },
     reset() { return this.action(`/chats/${this.id}/reset`); },

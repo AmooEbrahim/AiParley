@@ -83,7 +83,7 @@ class ChatController extends Controller
         return redirect()->route('chats.index')->with('success', 'Chat deleted.');
     }
 
-    public function start(Chat $chat)
+    public function start(Request $request, Chat $chat)
     {
         if ($chat->status !== 'idle') {
             return response()->json(['ok' => false, 'error' => 'Chat must be idle to start auto-run.'], 409);
@@ -93,9 +93,18 @@ class ChatController extends Controller
             return response()->json(['ok' => false, 'error' => 'Auto-run needs at least 2 active agents.'], 422);
         }
 
+        // The page sends the current budget input so Start auto works without
+        // pressing Save first.
+        $data = $request->validate([
+            'auto_budget' => ['nullable', 'integer', 'min:1', 'max:500'],
+        ]);
+
+        $budget = (int) ($data['auto_budget'] ?? $chat->auto_budget);
+
         $chat->update([
             'status' => 'running',
-            'message_limit' => $chat->agentMessageCount() + $chat->auto_budget,
+            'auto_budget' => $budget,
+            'message_limit' => $chat->agentMessageCount() + $budget,
             'last_error' => null,
             'error_agent_id' => null,
         ]);

@@ -22,7 +22,10 @@
 
                 <div class="ml-auto flex flex-wrap items-center gap-2">
                     <template x-if="status === 'idle'">
-                        <button type="button" class="btn-primary" :disabled="busy" x-on:click="start()">
+                        <button type="button" class="btn-primary"
+                                :disabled="busy || !budgetValid"
+                                :title="budgetValid ? 'Start the automatic loop with the current budget' : 'Budget must be between 1 and 500'"
+                                x-on:click="start()">
                             <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.84A1.5 1.5 0 0 0 4 4.11v11.78a1.5 1.5 0 0 0 2.3 1.27l9.34-5.89a1.5 1.5 0 0 0 0-2.54L6.3 2.84Z"/></svg>
                             Start auto
                         </button>
@@ -40,20 +43,33 @@
                     <form method="POST" action="{{ route('chats.update', $chat) }}" class="flex items-center gap-2">
                         @csrf
                         @method('PUT')
-                        <label class="text-xs text-zinc-500">Budget</label>
-                        <input type="number" name="auto_budget" min="1" max="500" x-model="budget"
-                               class="w-20 rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-2 py-1.5 text-sm">
-                        <button type="submit" class="btn-ghost !px-3 !py-1.5">Save</button>
+                        <label for="chat-budget" class="text-xs text-zinc-500">Budget</label>
+                        <input type="number" id="chat-budget" name="auto_budget" min="1" max="500" x-model="budget"
+                               class="w-20 rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-2 py-1.5 text-sm
+                                      focus:border-violet-500/60 focus:outline-none focus:ring-2 focus:ring-violet-500/20">
+                        <button type="submit" class="btn-ghost !px-3 !py-1.5" x-show="budgetDirty" x-cloak>Save</button>
+                        <span x-show="budgetDirty" x-cloak class="text-[11px] text-amber-400/90">unsaved</span>
                     </form>
 
-                    <form method="POST" action="{{ route('chats.destroy', $chat) }}"
-                          onsubmit="return confirm('Delete this chat and all its messages?')">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="btn-danger !px-3 !py-1.5" title="Delete chat">
-                            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.14l.25 6a.75.75 0 0 0 1.5-.14l-.25-6Zm3.5.02a.75.75 0 0 0-.72.78l.2 6a.75.75 0 1 0 1.5-.05l-.2-6a.75.75 0 0 0-.78-.73Z" clip-rule="evenodd"/></svg>
+                    <div class="relative" x-data="{ menu: false }"
+                         x-on:click.outside="menu = false" x-on:keydown.escape.window="menu = false">
+                        <button type="button" class="btn-ghost !px-2.5 !py-1.5" title="More actions"
+                                :aria-expanded="menu" x-on:click="menu = !menu">
+                            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm0 5.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm0 5.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg>
                         </button>
-                    </form>
+                        <div x-show="menu" x-cloak x-transition.opacity
+                             class="absolute right-0 z-30 mt-2 w-44 rounded-xl border border-zinc-700 bg-zinc-900 p-1 shadow-2xl">
+                            <form method="POST" action="{{ route('chats.destroy', $chat) }}"
+                                  onsubmit="return confirm('Delete this chat and all its messages?')">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-red-300 transition hover:bg-red-500/10">
+                                    <svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.14l.25 6a.75.75 0 0 0 1.5-.14l-.25-6Zm3.5.02a.75.75 0 0 0-.72.78l.2 6a.75.75 0 1 0 1.5-.05l-.2-6a.75.75 0 0 0-.78-.73Z" clip-rule="evenodd"/></svg>
+                                    Delete chat
+                                </button>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -78,94 +94,137 @@
         </div>
 
         {{-- Agents panel --}}
+        @php($activeChatAgents = $chat->chatAgents->where('active', true)->sortBy('position'))
+        @php($inactiveChatAgents = $chat->chatAgents->where('active', false)->sortBy('position'))
+        @php($formerNames = $inactiveChatAgents->groupBy(fn ($ca) => $ca->display_name ?: $ca->agent->name)->map->count())
+
         <details class="card">
-            <summary class="cursor-pointer select-none px-4 py-3 text-sm font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-200">
+            <summary class="flex cursor-pointer select-none items-center gap-2 px-4 py-3 text-sm font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-200">
                 Agents in this chat
+                <span class="rounded-full border border-zinc-700/70 bg-zinc-800/50 px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal text-zinc-500">
+                    {{ $activeChatAgents->count() }} active
+                </span>
             </summary>
             <div class="space-y-3 border-t border-zinc-800/80 p-4">
-                @foreach ($chat->chatAgents->sortBy('position') as $chatAgent)
-                    @php($pivotColor = $chatAgent->color ?: ($chatAgent->agent->color ?? '#a78bfa'))
-                    @if ($chatAgent->active)
-                        <div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
-                            <form method="POST" action="{{ route('chat-agents.update', [$chat, $chatAgent]) }}">
-                                @csrf
-                                @method('PUT')
-                                <div class="flex flex-wrap items-center gap-3">
-                                    <input type="color" name="color" value="{{ $pivotColor }}" title="Bubble color"
-                                           class="h-9 w-12 cursor-pointer rounded-lg border border-zinc-700 bg-zinc-900 p-1">
-                                    <input type="text" name="display_name" value="{{ $chatAgent->display_name }}" maxlength="120" dir="auto"
-                                           placeholder="Name (defaults to {{ $chatAgent->agent->name }})"
-                                           class="rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-3 py-1.5 text-sm font-semibold" style="color: {{ $pivotColor }}">
-                                    <span class="text-xs text-zinc-500">{{ $chatAgent->agent->name }} ·</span>
-                                    <span class="rounded-md border border-zinc-700/70 bg-zinc-800/60 px-2 py-0.5 font-mono text-xs text-zinc-400">{{ $chatAgent->agent->model }}</span>
-                                    <label class="flex items-center gap-2 text-xs text-zinc-500">
+                <form id="bulk-agents-form" method="POST" action="{{ route('chat-agents.bulk', $chat) }}">
+                    @csrf
+                    @method('PUT')
+
+                    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <p class="text-xs text-zinc-500">Edit any participant, then save all changes once.</p>
+                        <button type="submit" class="btn-primary !px-3 !py-1.5">Save all</button>
+                    </div>
+
+                    <div class="space-y-3">
+                        @foreach ($activeChatAgents as $chatAgent)
+                            @php($pivotColor = $chatAgent->color ?: ($chatAgent->agent->color ?? '#a78bfa'))
+                            <div data-participant-id="{{ $chatAgent->id }}"
+                                 class="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3.5 transition focus-within:border-zinc-700">
+                                <div class="flex flex-wrap items-center gap-2.5">
+                                    <input type="color" name="agents[{{ $chatAgent->id }}][color]" value="{{ $pivotColor }}" title="Bubble color"
+                                           class="h-9 w-12 shrink-0 cursor-pointer rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+                                    <input type="text" name="agents[{{ $chatAgent->id }}][display_name]"
+                                           value="{{ $chatAgent->display_name }}" maxlength="120" dir="auto"
+                                           placeholder="{{ $chatAgent->agent->name }}"
+                                           class="min-w-[9rem] flex-1 rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-3 py-1.5 text-sm font-semibold focus:border-violet-500/60 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                                           style="color: {{ $pivotColor }}">
+                                    <span class="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/70 bg-zinc-800/50 px-2 py-0.5 text-[11px] text-zinc-400">
+                                        {{ $chatAgent->agent->name }}
+                                        <span class="text-zinc-600">·</span>
+                                        <code class="font-mono text-[11px]">{{ $chatAgent->agent->model }}</code>
+                                    </span>
+                                    <label class="flex items-center gap-1.5 text-[11px] text-zinc-500">
                                         Position
-                                        <input type="number" name="position" min="0" value="{{ $chatAgent->position }}"
+                                        <input type="number" name="agents[{{ $chatAgent->id }}][position]" min="0"
+                                               value="{{ $chatAgent->position }}"
                                                class="w-16 rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-2 py-1 text-sm">
                                     </label>
-                                    <label class="flex items-center gap-2 text-xs text-zinc-500">
+                                    <label class="flex items-center gap-1.5 text-[11px] text-zinc-500">
                                         Swap to
-                                        <select name="agent_id" class="rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-2 py-1 text-sm">
+                                        <select name="agents[{{ $chatAgent->id }}][agent_id]"
+                                                class="rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-2 py-1 text-sm">
                                             <option value="">— keep —</option>
                                             @foreach ($availableAgents as $availableAgent)
                                                 <option value="{{ $availableAgent->id }}">{{ $availableAgent->name }} — {{ $availableAgent->model }}</option>
                                             @endforeach
                                         </select>
                                     </label>
-                                    <span class="ml-auto flex items-center gap-2">
-                                        <button type="submit" class="btn-ghost !px-3 !py-1.5">Save</button>
-                                    </span>
+                                    <button type="button"
+                                            onclick="if (confirm('Remove this participant from the chat? Their messages stay in history.')) { document.getElementById('remove-agent-{{ $chatAgent->id }}').submit(); }"
+                                            class="ml-auto rounded-md px-2 py-1 text-[11px] text-zinc-500 transition hover:bg-red-500/10 hover:text-red-300"
+                                            title="Remove from chat (history kept)">Remove</button>
                                 </div>
-                                <div class="mt-2">
-                                    <label class="label">Initial prompt for this chat</label>
-                                    <textarea name="initial_prompt" rows="2"
-                                              class="input font-mono text-[13px]" dir="auto">{{ $chatAgent->initial_prompt }}</textarea>
+                                <div class="mt-3">
+                                    <label for="initial-prompt-{{ $chatAgent->id }}" class="label">Initial prompt for this chat</label>
+                                    <textarea id="initial-prompt-{{ $chatAgent->id }}"
+                                              name="agents[{{ $chatAgent->id }}][initial_prompt]" rows="4" dir="auto"
+                                              placeholder="Who is this participant in this conversation?"
+                                              class="input min-h-[110px] resize-y text-sm leading-relaxed">{{ $chatAgent->initial_prompt }}</textarea>
                                 </div>
-                            </form>
-                            <form method="POST" action="{{ route('chat-agents.destroy', [$chat, $chatAgent]) }}"
-                                  class="mt-2 text-right"
-                                  onsubmit="return confirm('Remove this agent from the chat? Its messages stay in the history.')">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit" class="text-xs text-zinc-600 hover:text-red-400">Remove from chat</button>
-                            </form>
-                        </div>
-                    @else
-                        <div class="flex items-center gap-3 rounded-xl border border-dashed border-zinc-800 px-3 py-2 text-xs text-zinc-600">
-                            <span class="h-2.5 w-2.5 rounded-full" style="background: {{ $pivotColor }}"></span>
-                            <span>{{ $chatAgent->display_name ?: $chatAgent->agent->name }}</span>
-                            <span>removed — history kept</span>
-                        </div>
-                    @endif
+                            </div>
+                        @endforeach
+                    </div>
+                </form>
+
+                @foreach ($activeChatAgents as $chatAgent)
+                    <form id="remove-agent-{{ $chatAgent->id }}" method="POST"
+                          action="{{ route('chat-agents.destroy', [$chat, $chatAgent]) }}" class="hidden">
+                        @csrf
+                        @method('DELETE')
+                    </form>
                 @endforeach
 
-                <div class="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3"
+                @if ($inactiveChatAgents->isNotEmpty())
+                    <details class="rounded-xl border border-zinc-800/70 bg-zinc-900/30">
+                        <summary class="cursor-pointer select-none px-3 py-2 text-[11px] text-zinc-500 hover:text-zinc-300">
+                            Former participants <span class="text-zinc-600">· history kept</span>
+                        </summary>
+                        <div class="flex flex-wrap gap-1.5 border-t border-zinc-800/70 px-3 py-2">
+                            @foreach ($formerNames as $name => $count)
+                                <span class="inline-flex items-center gap-1.5 rounded-md border border-zinc-800 px-2 py-1 text-[11px] text-zinc-500">
+                                    {{ $name }}@if ($count > 1)<span class="text-zinc-600">×{{ $count }}</span>@endif
+                                </span>
+                            @endforeach
+                        </div>
+                    </details>
+                @endif
+
+                <div class="rounded-xl border border-dashed border-zinc-700/70 bg-zinc-900/30 p-3.5"
                      x-data="{ color: '{{ $availableAgents->first()?->color ?? '#a78bfa' }}' }">
-                    <form method="POST" action="{{ route('chat-agents.store', $chat) }}" class="flex flex-1 flex-wrap items-end gap-3">
+                    <form method="POST" action="{{ route('chat-agents.store', $chat) }}" class="space-y-3">
                         @csrf
-                        <div>
-                            <label class="label">Add agent</label>
-                            <select name="agent_id" required
-                                    @change="const o = $event.target.selectedOptions[0]; if (o?.dataset.color) color = o.dataset.color"
-                                    class="rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-2 py-1.5 text-sm">
-                                <option value="" disabled selected>Choose agent / model…</option>
-                                @foreach ($availableAgents as $availableAgent)
-                                    <option value="{{ $availableAgent->id }}" data-color="{{ $availableAgent->color }}">{{ $availableAgent->name }} — {{ $availableAgent->model }}</option>
-                                @endforeach
-                            </select>
+                        <div class="flex flex-wrap items-end gap-3">
+                            <div class="min-w-[220px] flex-1">
+                                <label for="add-agent-id" class="label">Add agent</label>
+                                <select id="add-agent-id" name="agent_id" required
+                                        @change="const o = $event.target.selectedOptions[0]; if (o?.dataset.color) color = o.dataset.color"
+                                        class="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-2 py-2 text-sm">
+                                    <option value="" disabled selected>Choose agent / model…</option>
+                                    @foreach ($availableAgents as $availableAgent)
+                                        <option value="{{ $availableAgent->id }}" data-color="{{ $availableAgent->color }}">{{ $availableAgent->name }} — {{ $availableAgent->model }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="min-w-[160px]">
+                                <label for="add-agent-name" class="label">Name <span class="text-zinc-600">(optional)</span></label>
+                                <input type="text" id="add-agent-name" name="display_name" maxlength="120" dir="auto"
+                                       class="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-3 py-2 text-sm">
+                            </div>
+                            <div>
+                                <label for="add-agent-color" class="label">Color</label>
+                                <input type="color" id="add-agent-color" name="color" x-model="color" title="Bubble color"
+                                       class="h-[38px] w-14 cursor-pointer rounded-lg border border-zinc-700 bg-zinc-900 p-1">
+                            </div>
                         </div>
                         <div>
-                            <label class="label">Name</label>
-                            <input type="text" name="display_name" maxlength="120" dir="auto"
-                                   class="rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-3 py-1.5 text-sm">
+                            <label for="add-agent-prompt" class="label">Initial prompt <span class="text-zinc-600">(optional — falls back to the agent default)</span></label>
+                            <textarea id="add-agent-prompt" name="initial_prompt" rows="3" dir="auto"
+                                      class="input min-h-[80px] resize-y text-sm leading-relaxed"
+                                      placeholder="Who is this participant in this conversation?"></textarea>
                         </div>
-                        <input type="color" name="color" x-model="color" title="Bubble color (defaults to the agent's color)"
-                               class="h-[38px] w-14 cursor-pointer rounded-lg border border-zinc-700 bg-zinc-900 p-1">
-                        <div class="min-w-[220px] flex-1">
-                            <label class="label">Initial prompt (optional)</label>
-                            <input type="text" name="initial_prompt" class="input" placeholder="Falls back to the agent default">
+                        <div class="flex justify-end">
+                            <button type="submit" class="btn-ghost !px-3 !py-1.5">Add to chat</button>
                         </div>
-                        <button type="submit" class="btn-primary !px-3 !py-1.5">Add</button>
                     </form>
                 </div>
             </div>

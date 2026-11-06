@@ -37,6 +37,7 @@ Route::post('/chats/{chat}/reset', [ChatController::class, 'reset'])->name('chat
 
 // Chat agents
 Route::post('/chats/{chat}/agents', [ChatAgentController::class, 'store'])->name('chat-agents.store');
+Route::put('/chats/{chat}/agents', [ChatAgentController::class, 'bulkUpdate'])->name('chat-agents.bulk');
 Route::put('/chats/{chat}/agents/{chatAgent}', [ChatAgentController::class, 'update'])->name('chat-agents.update');
 Route::delete('/chats/{chat}/agents/{chatAgent}', [ChatAgentController::class, 'destroy'])->name('chat-agents.destroy');
 

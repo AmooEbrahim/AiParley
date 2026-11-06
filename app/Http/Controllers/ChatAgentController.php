@@ -6,6 +6,7 @@ use App\Models\Agent;
 use App\Models\Chat;
 use App\Models\ChatAgent;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class ChatAgentController extends Controller
@@ -32,7 +33,62 @@ class ChatAgentController extends Controller
             'joined_at' => now(),
         ]);
 
-        return back()->with('success', 'Agent added to chat.');
+        return back()->with('success', 'Agent added.');
+    }
+
+    public function bulkUpdate(Request $request, Chat $chat)
+    {
+        $data = $request->validate([
+            'agents' => ['nullable', 'array'],
+            'agents.*.agent_id' => ['nullable', 'integer', Rule::exists('agents', 'id')->whereNull('deleted_at')],
+            'agents.*.display_name' => ['nullable', 'string', 'max:120'],
+            'agents.*.position' => ['nullable', 'integer', 'min:0', 'max:1000'],
+            'agents.*.initial_prompt' => ['nullable', 'string', 'max:20000'],
+            'agents.*.color' => ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
+        ]);
+
+        DB::transaction(function () use ($chat, $data) {
+            $rows = $data['agents'] ?? [];
+
+            foreach ($chat->chatAgents()->where('active', true)->get() as $chatAgent) {
+                $row = $rows[$chatAgent->id] ?? null;
+
+                if ($row === null) {
+                    continue;
+                }
+
+                $swapId = isset($row['agent_id']) && (int) $row['agent_id'] !== $chatAgent->agent_id
+                    ? (int) $row['agent_id']
+                    : null;
+
+                if ($swapId !== null) {
+                    $newAgent = Agent::findOrFail($swapId);
+
+                    $chatAgent->update(['active' => false, 'left_at' => now()]);
+
+                    $chat->chatAgents()->create([
+                        'agent_id' => $newAgent->id,
+                        'color' => $row['color'] ?? $newAgent->color,
+                        'display_name' => $row['display_name'] ?? $chatAgent->display_name,
+                        'position' => $row['position'] ?? $chatAgent->position,
+                        'initial_prompt' => $row['initial_prompt'] ?? null,
+                        'active' => true,
+                        'joined_at' => now(),
+                    ]);
+
+                    continue;
+                }
+
+                $chatAgent->update([
+                    'display_name' => $row['display_name'] ?? $chatAgent->display_name,
+                    'position' => $row['position'] ?? $chatAgent->position,
+                    'initial_prompt' => $row['initial_prompt'] ?? $chatAgent->initial_prompt,
+                    'color' => $row['color'] ?? $chatAgent->color,
+                ]);
+            }
+        });
+
+        return back()->with('success', 'Changes saved.');
     }
 
     public function update(Request $request, Chat $chat, ChatAgent $chatAgent)
@@ -65,7 +121,7 @@ class ChatAgentController extends Controller
                 'joined_at' => now(),
             ]);
 
-            return back()->with('success', 'Agent swapped.');
+            return back()->with('success', 'Changes saved.');
         }
 
         $chatAgent->update([
@@ -75,13 +131,13 @@ class ChatAgentController extends Controller
             'color' => $data['color'] ?? $chatAgent->color,
         ]);
 
-        return back()->with('success', 'Chat agent updated.');
+        return back()->with('success', 'Changes saved.');
     }
 
     public function destroy(Chat $chat, ChatAgent $chatAgent)
     {
         $chatAgent->update(['active' => false, 'left_at' => now()]);
 
-        return back()->with('success', 'Agent removed from chat (history kept).');
+        return back()->with('success', 'Agent removed.');
     }
 }
